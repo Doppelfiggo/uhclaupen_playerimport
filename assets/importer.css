@@ -1,0 +1,230 @@
+/* UHC Laupen Spieler Importer — Admin Styles */
+
+.uhc-importer h1 {
+	margin-bottom: 24px;
+}
+
+.uhc-importer__card {
+	background: #fff;
+	border: 1px solid #c3c4c7;
+	border-radius: 4px;
+	padding: 24px;
+	margin-top: 16px;
+	margin-bottom: 24px;
+}
+
+.uhc-importer__info {
+	margin-top: 32px;
+}
+
+.uhc-importer__info h3 {
+	margin-bottom: 12px;
+}
+
+/* Notices */
+.uhc-importer__notice {
+	padding: 12px 16px;
+	border-radius: 4px;
+	margin-bottom: 16px;
+	border-left: 4px solid transparent;
+}
+
+.uhc-importer__notice--info {
+	background: #e8f0fe;
+	border-color: #4285f4;
+}
+
+.uhc-importer__notice--success {
+	background: #e6f4ea;
+	border-color: #34a853;
+}
+
+.uhc-importer__notice--warn {
+	background: #fef7e0;
+	border-color: #f9ab00;
+}
+
+/* Table wrap with horizontal scroll on small screens */
+.uhc-importer__table-wrap {
+	overflow-x: auto;
+	margin-bottom: 20px;
+}
+
+.uhc-importer__preview-table {
+	min-width: 800px;
+}
+
+/* Warn row highlight */
+.uhc-importer__row--warn {
+	background-color: #fff8e1 !important;
+}
+
+/* Badges */
+.uhc-importer__badge {
+	display: inline-block;
+	padding: 2px 8px;
+	border-radius: 3px;
+	font-size: 12px;
+	font-weight: 600;
+	white-space: nowrap;
+}
+
+.uhc-importer__badge--ok {
+	background: #e6f4ea;
+	color: #1e8e3e;
+}
+
+.uhc-importer__badge--warn {
+	background: #fce8e6;
+	color: #c5221f;
+}
+
+.uhc-importer__badge--new {
+	background: #e8f0fe;
+	color: #1967d2;
+}
+
+.uhc-importer__badge--update {
+	background: #e8f5e9;
+	color: #2e7d32;
+}
+
+.uhc-importer__badge--created {
+	background: #e8f0fe;
+	color: #1967d2;
+}
+
+.uhc-importer__badge--updated {
+	background: #e8f5e9;
+	color: #2e7d32;
+}
+
+.uhc-importer__badge--error {
+	background: #fce8e6;
+	color: #c5221f;
+}
+
+.uhc-importer__badge--skipped {
+	background: #f1f3f4;
+	color: #5f6368;
+}
+
+/* Action buttons row */
+.uhc-importer__actions {
+	margin-top: 20px;
+	display: flex;
+	align-items: center;
+	gap: 8px;
+}
+
+/* ── Section titles ─────────────────────────────────────────────────── */
+
+.uhc-importer__section-title {
+	font-size: 14px;
+	font-weight: 600;
+	margin: 0 0 16px;
+	padding-bottom: 12px;
+	border-bottom: 1px solid #e0e0e0;
+}
+
+.uhc-importer__section-title--warn {
+	color: #b45309;
+}
+
+/* ── Warn card variant ──────────────────────────────────────────────── */
+
+.uhc-importer__card--warn {
+	border-color: #f9ab00;
+	background: #fffdf0;
+}
+
+/* ── Bulk assignment toolbar ────────────────────────────────────────── */
+
+.uhc-importer__bulk-bar {
+	display: flex;
+	align-items: center;
+	flex-wrap: wrap;
+	gap: 10px;
+	padding: 12px 16px;
+	background: #fff8e1;
+	border: 1px solid #f9ab00;
+	border-radius: 4px;
+	margin-bottom: 16px;
+}
+
+.uhc-importer__bulk-sep {
+	color: #888;
+	font-size: 18px;
+	line-height: 1;
+}
+
+.uhc-importer__select {
+	min-width: 200px;
+}
+
+.uhc-importer__col-check {
+	width: 32px;
+}
+
+.uhc-importer__csv-team {
+	color: #888;
+	font-size: 12px;
+}
+
+/* ── Settings: user list ────────────────────────────────────────────── */
+
+.uhc-importer__user-list {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+	max-height: 420px;
+	overflow-y: auto;
+	border: 1px solid #c3c4c7;
+	border-radius: 4px;
+	padding: 4px;
+	background: #f9f9f9;
+}
+
+.uhc-importer__user-row {
+	display: grid;
+	grid-template-columns: 24px 1fr auto;
+	align-items: center;
+	gap: 10px;
+	padding: 8px 10px;
+	border-radius: 3px;
+	cursor: pointer;
+	background: #fff;
+	border: 1px solid transparent;
+	transition: border-color 0.15s;
+}
+
+.uhc-importer__user-row:hover {
+	border-color: #c3c4c7;
+}
+
+.uhc-importer__user-row--admin {
+	background: #f0f0f0;
+	cursor: default;
+	opacity: 0.8;
+}
+
+.uhc-importer__user-name {
+	display: flex;
+	flex-direction: column;
+	gap: 1px;
+	font-weight: 500;
+}
+
+.uhc-importer__user-login {
+	font-size: 12px;
+	color: #888;
+	font-weight: 400;
+}
+
+.uhc-importer__user-role {
+	font-size: 12px;
+	color: #666;
+	display: flex;
+	align-items: center;
+	gap: 6px;
+}
