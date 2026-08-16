@@ -11,6 +11,12 @@ if ( ! defined( 'ABSPATH' ) ) {
 
 class UHC_Importer {
 
+	/**
+	 * Import modes.
+	 */
+	const MODE_UPDATE = 'update';
+	const MODE_FRESH  = 'fresh';
+
 	public function __construct() {
 		add_action( 'admin_menu', array( $this, 'register_menu' ) );
 		add_action( 'admin_enqueue_scripts', array( $this, 'enqueue_assets' ) );
@@ -21,7 +27,7 @@ class UHC_Importer {
 		// The actual capability passed to add_management_page must be a real
 		// WordPress cap string, so we use 'read' (everyone has it) and then
 		// do our own stricter check in render_page().
-		$hook = add_management_page(
+		add_management_page(
 			__( 'Spieler Import', 'uhc-laupen-importer' ),
 			__( 'Spieler Import', 'uhc-laupen-importer' ),
 			'read',
@@ -29,9 +35,6 @@ class UHC_Importer {
 			array( $this, 'render_page' )
 		);
 
-		// Hide the menu item entirely from users who are not allowed.
-		// We do this by removing it from the global menu array after it's
-		// added — cleaner than filtering the capability on the hook itself.
 		if ( ! UHC_Importer_Settings::current_user_can_import() ) {
 			remove_menu_page( 'uhc-spieler-import' );
 		}
@@ -89,8 +92,10 @@ class UHC_Importer {
 	// ── Step 1: Upload form ───────────────────────────────────────────────
 
 	private function step_upload() {
+		$player_count = wp_count_posts( 'spieler' );
+		$published    = isset( $player_count->publish ) ? (int) $player_count->publish : 0;
 		?>
-		<p><?php esc_html_e( 'Lade eine CSV-Exportdatei aus ClubDesk hoch. Spieler werden automatisch mit dem passenden Team verknüpft. Unbekannte Teams können manuell zugewiesen werden.', 'uhc-laupen-importer' ); ?></p>
+		<p><?php esc_html_e( 'Lade eine CSV-Exportdatei aus ClubDesk hoch. Spieler werden automatisch mit dem passenden Team, dem Spielerbild und dem Sponsorenbild verknüpft.', 'uhc-laupen-importer' ); ?></p>
 
 		<div class="uhc-importer__card">
 			<form method="post" enctype="multipart/form-data" action="">
@@ -101,7 +106,36 @@ class UHC_Importer {
 						<th><label for="uhc_csv_file"><?php esc_html_e( 'CSV-Datei', 'uhc-laupen-importer' ); ?></label></th>
 						<td>
 							<input type="file" name="uhc_csv_file" id="uhc_csv_file" accept=".csv" required />
-							<p class="description"><?php esc_html_e( 'ClubDesk CSV-Export (Semikolon-getrennt, UTF-8).', 'uhc-laupen-importer' ); ?></p>
+							<p class="description"><?php esc_html_e( 'ClubDesk CSV-Export (Semikolon-getrennt).', 'uhc-laupen-importer' ); ?></p>
+						</td>
+					</tr>
+					<tr>
+						<th><?php esc_html_e( 'Modus', 'uhc-laupen-importer' ); ?></th>
+						<td>
+							<fieldset class="uhc-importer__modes">
+								<label class="uhc-importer__mode">
+									<input type="radio" name="uhc_mode" value="<?php echo esc_attr( self::MODE_UPDATE ); ?>" checked />
+									<span>
+										<strong><?php esc_html_e( 'Spieler aktualisieren', 'uhc-laupen-importer' ); ?></strong><br />
+										<span class="description"><?php esc_html_e( 'Bestehende Spieler werden aktualisiert, neue hinzugefügt. Spieler, die nicht in der Datei stehen, bleiben unverändert. Ideal, um einzelne Teams nachzuimportieren.', 'uhc-laupen-importer' ); ?></span>
+									</span>
+								</label>
+								<label class="uhc-importer__mode">
+									<input type="radio" name="uhc_mode" value="<?php echo esc_attr( self::MODE_FRESH ); ?>" />
+									<span>
+										<strong><?php esc_html_e( 'Spieler neu importieren', 'uhc-laupen-importer' ); ?></strong><br />
+										<span class="description">
+											<?php
+											printf(
+												/* translators: %d: number of published players */
+												esc_html__( 'Für den Saisonstart: alle Spieler, die nicht in dieser Datei stehen, werden in den Papierkorb verschoben (aktuell %d Spieler). Danach mit „Spieler aktualisieren“ die weiteren Teams nachimportieren.', 'uhc-laupen-importer' ),
+												$published
+											);
+											?>
+										</span>
+									</span>
+								</label>
+							</fieldset>
 						</td>
 					</tr>
 					<tr>
@@ -131,12 +165,14 @@ class UHC_Importer {
 				<tbody>
 					<tr><td>Vorname</td><td>vorname</td><td><?php esc_html_e( 'Wird auch als Post-Titel verwendet', 'uhc-laupen-importer' ); ?></td></tr>
 					<tr><td>Nachname</td><td>nachname</td><td>—</td></tr>
-					<tr><td>Rückennummer</td><td>spielernummer</td><td>—</td></tr>
-					<tr><td>Funktion</td><td>position</td><td><?php esc_html_e( 'Torhüter, Feldspieler, oder Staff', 'uhc-laupen-importer' ); ?></td></tr>
-					<tr><td>Nationalität</td><td>nationalitat</td><td>—</td></tr>
+					<tr><td>Rückennummer / Spielernummer</td><td>spielernummer</td><td><?php esc_html_e( 'Schreibweise egal — sonst Spalte manuell wählen', 'uhc-laupen-importer' ); ?></td></tr>
+					<tr><td>Funktion</td><td>position</td><td><?php esc_html_e( 'Torhüter, Feldspieler oder Staff', 'uhc-laupen-importer' ); ?></td></tr>
+					<tr><td>Nationalität</td><td>nationalitat</td><td><?php esc_html_e( 'Leere Werte überschreiben nichts', 'uhc-laupen-importer' ); ?></td></tr>
 					<tr><td>Geburtsdatum</td><td>geburtsdatum</td><td>—</td></tr>
-					<tr><td>Team</td><td>team (Relationship)</td><td><?php esc_html_e( 'Automatisch verknüpft — oder manuell im nächsten Schritt', 'uhc-laupen-importer' ); ?></td></tr>
+					<tr><td>Team</td><td>teams (Relationship)</td><td><?php esc_html_e( 'Automatisch verknüpft — oder manuell im nächsten Schritt', 'uhc-laupen-importer' ); ?></td></tr>
 					<tr><td>E-Mail</td><td>email</td><td><?php esc_html_e( 'Optional', 'uhc-laupen-importer' ); ?></td></tr>
+					<tr><td>Sponsor</td><td>sponsorenbild</td><td><?php esc_html_e( 'Mediendatei mit demselben Namen wird verknüpft', 'uhc-laupen-importer' ); ?></td></tr>
+					<tr><td>Vorname + Nachname</td><td>spielerbild</td><td><?php esc_html_e( 'Mediendatei „vorname.nachname“ wird verknüpft', 'uhc-laupen-importer' ); ?></td></tr>
 				</tbody>
 			</table>
 		</div>
@@ -146,15 +182,31 @@ class UHC_Importer {
 	// ── Step 2: Preview ───────────────────────────────────────────────────
 
 	private function step_preview() {
-		if ( empty( $_FILES['uhc_csv_file']['tmp_name'] ) ) {
-			echo '<div class="notice notice-error"><p>' . esc_html__( 'Keine Datei hochgeladen.', 'uhc-laupen-importer' ) . '</p></div>';
+		$mode          = $this->get_mode();
+		$dry_run       = ! empty( $_POST['uhc_dry_run'] );
+		$number_column = isset( $_POST['uhc_number_column'] ) ? sanitize_text_field( wp_unslash( $_POST['uhc_number_column'] ) ) : '';
+
+		// Either a fresh upload, or a re-analysis of the file we already stored.
+		if ( ! empty( $_FILES['uhc_csv_file']['tmp_name'] ) ) {
+			$token = $this->store_upload( sanitize_text_field( $_FILES['uhc_csv_file']['tmp_name'] ) );
+			if ( is_wp_error( $token ) ) {
+				echo '<div class="notice notice-error"><p>' . esc_html( $token->get_error_message() ) . '</p></div>';
+				$this->step_upload();
+				return;
+			}
+		} else {
+			$token = isset( $_POST['uhc_file_token'] ) ? sanitize_file_name( wp_unslash( $_POST['uhc_file_token'] ) ) : '';
+		}
+
+		$path = $this->token_path( $token );
+		if ( ! $path ) {
+			echo '<div class="notice notice-error"><p>' . esc_html__( 'Keine Datei gefunden. Bitte lade die CSV erneut hoch.', 'uhc-laupen-importer' ) . '</p></div>';
 			$this->step_upload();
 			return;
 		}
 
-		$dry_run = ! empty( $_POST['uhc_dry_run'] );
-		$parser  = new UHC_CSV_Parser();
-		$result  = $parser->parse( sanitize_text_field( $_FILES['uhc_csv_file']['tmp_name'] ) );
+		$parser = new UHC_CSV_Parser();
+		$result = $parser->parse( $path, $number_column );
 
 		if ( is_wp_error( $result ) ) {
 			echo '<div class="notice notice-error"><p>' . esc_html( $result->get_error_message() ) . '</p></div>';
@@ -162,34 +214,56 @@ class UHC_Importer {
 			return;
 		}
 
-		$rows    = $result['rows'];
-		$skipped = $result['skipped'];
-		$total   = count( $rows );
+		$rows     = $result['rows'];
+		$skipped  = $result['skipped'];
+		$headers  = $result['headers'];
+		$resolved = $result['resolved'];
+		$total    = count( $rows );
 
-		// Separate into matched/unmatched.
 		$matched   = array();
 		$unmatched = array();
 		foreach ( $rows as $index => $row ) {
 			$team_post = $this->find_team_post( $row['team'] );
+			$entry     = array(
+				'index'     => $index,
+				'row'       => $row,
+				'team_post' => $team_post,
+				'photo'     => UHC_Media_Matcher::find_player_photo( $row['vorname'], $row['nachname'], $row['benutzer_id'] ?? '' ),
+				'sponsors'  => UHC_Media_Matcher::find_sponsors( $row['sponsor'] ?? '' ),
+				'existing'  => $this->get_existing_spieler( $row['vorname'], $row['nachname'] ),
+			);
 			if ( $team_post ) {
-				$matched[] = array( 'index' => $index, 'row' => $row, 'team_post' => $team_post );
+				$matched[] = $entry;
 			} else {
-				$unmatched[] = array( 'index' => $index, 'row' => $row );
+				$unmatched[] = $entry;
 			}
 		}
 
-		// Get all team posts for the assignment dropdowns.
 		$all_teams = get_posts( array(
-			'post_type'      => 'team',
-			'post_status'    => 'publish',
-			'posts_per_page' => -1,
-			'orderby'        => 'title',
-			'order'          => 'ASC',
+			'post_type'              => 'team',
+			'post_status'            => 'publish',
+			'posts_per_page'         => -1,
+			'orderby'                => 'title',
+			'order'                  => 'ASC',
 			'update_post_meta_cache' => false,
 			'update_post_term_cache' => false,
 		) );
 
-		$encoded = base64_encode( json_encode( $rows ) );
+		// How many players would the fresh mode remove?
+		$to_trash = array();
+		if ( self::MODE_FRESH === $mode ) {
+			$keep = array();
+			foreach ( $rows as $row ) {
+				$existing = $this->get_existing_spieler( $row['vorname'], $row['nachname'] );
+				if ( $existing ) {
+					$keep[] = $existing->ID;
+				}
+			}
+			$to_trash = $this->players_to_trash( $keep );
+		}
+
+		$photos_found   = count( array_filter( array_merge( $matched, $unmatched ), fn( $e ) => (bool) $e['photo'] ) );
+		$sponsors_found = count( array_filter( array_merge( $matched, $unmatched ), fn( $e ) => ! empty( $e['sponsors']['ids'] ) ) );
 		?>
 
 		<div class="uhc-importer__notice uhc-importer__notice--info">
@@ -201,16 +275,72 @@ class UHC_Importer {
 			<?php if ( count( $unmatched ) ) : ?>
 				· <span class="uhc-importer__badge uhc-importer__badge--warn"><?php printf( esc_html__( '%d Team nicht gefunden', 'uhc-laupen-importer' ), count( $unmatched ) ); ?></span>
 			<?php endif; ?>
-			<?php if ( $dry_run ) : ?>
-				<br><em><?php esc_html_e( '⚠ Probelauf — keine Daten werden gespeichert.', 'uhc-laupen-importer' ); ?></em>
+			· <span class="uhc-importer__badge uhc-importer__badge--ok"><?php printf( esc_html__( '%d Spielerbilder', 'uhc-laupen-importer' ), $photos_found ); ?></span>
+			<?php if ( $sponsors_found ) : ?>
+				· <span class="uhc-importer__badge uhc-importer__badge--ok"><?php printf( esc_html__( '%d Sponsorenbilder', 'uhc-laupen-importer' ), $sponsors_found ); ?></span>
 			<?php endif; ?>
+			<br>
+			<em>
+				<?php
+				printf(
+					esc_html__( 'Modus: %s', 'uhc-laupen-importer' ),
+					self::MODE_FRESH === $mode
+						? esc_html__( 'Spieler neu importieren', 'uhc-laupen-importer' )
+						: esc_html__( 'Spieler aktualisieren', 'uhc-laupen-importer' )
+				);
+				?>
+				<?php if ( $dry_run ) : ?>
+					· <?php esc_html_e( '⚠ Probelauf — keine Daten werden gespeichert.', 'uhc-laupen-importer' ); ?>
+				<?php endif; ?>
+			</em>
 		</div>
 
 		<form method="post" action="" id="uhc-preview-form">
 			<?php wp_nonce_field( 'uhc_import_action', 'uhc_import_nonce' ); ?>
 			<input type="hidden" name="uhc_import_step" value="import" />
-			<input type="hidden" name="uhc_import_data" value="<?php echo esc_attr( $encoded ); ?>" />
+			<input type="hidden" name="uhc_file_token" value="<?php echo esc_attr( $token ); ?>" />
+			<input type="hidden" name="uhc_mode" value="<?php echo esc_attr( $mode ); ?>" />
 			<input type="hidden" name="uhc_dry_run" value="<?php echo $dry_run ? '1' : '0'; ?>" />
+			<input type="hidden" name="uhc_number_column" value="<?php echo esc_attr( $resolved['spielernummer'] ); ?>" />
+
+			<?php if ( empty( $resolved['spielernummer'] ) ) : ?>
+			<!-- ── Jersey number column could not be detected ───────────── -->
+			<div class="uhc-importer__card uhc-importer__card--warn">
+				<h3 class="uhc-importer__section-title uhc-importer__section-title--warn">
+					⚠ <?php esc_html_e( 'Spalte für die Rückennummer nicht erkannt', 'uhc-laupen-importer' ); ?>
+				</h3>
+				<p><?php esc_html_e( 'Wähle die Spalte aus, in der die Rückennummer steht, und analysiere die Datei erneut.', 'uhc-laupen-importer' ); ?></p>
+			</div>
+			<?php endif; ?>
+
+			<?php if ( self::MODE_FRESH === $mode ) : ?>
+			<!-- ── Fresh import: confirmation ────────────────────────────── -->
+			<div class="uhc-importer__card uhc-importer__card--warn">
+				<h3 class="uhc-importer__section-title uhc-importer__section-title--warn">
+					⚠ <?php esc_html_e( 'Neuimport — bestehende Spieler entfernen', 'uhc-laupen-importer' ); ?>
+				</h3>
+				<?php if ( empty( $to_trash ) ) : ?>
+					<p><?php esc_html_e( 'Es gibt keine Spieler, die entfernt werden müssten.', 'uhc-laupen-importer' ); ?></p>
+				<?php else : ?>
+					<p>
+						<?php printf(
+							/* translators: %d: number of players */
+							esc_html__( '%d Spieler stehen nicht in dieser Datei und werden in den Papierkorb verschoben:', 'uhc-laupen-importer' ),
+							count( $to_trash )
+						); ?>
+					</p>
+					<p class="uhc-importer__trash-list">
+						<?php echo esc_html( implode( ', ', wp_list_pluck( $to_trash, 'post_title' ) ) ); ?>
+					</p>
+					<p>
+						<label>
+							<input type="checkbox" name="uhc_confirm_delete" value="1" id="uhc-confirm-delete" />
+							<strong><?php esc_html_e( 'Ja, alle bestehenden Spieler löschen', 'uhc-laupen-importer' ); ?></strong>
+						</label>
+					</p>
+				<?php endif; ?>
+			</div>
+			<?php endif; ?>
 
 			<?php if ( ! empty( $unmatched ) ) : ?>
 			<!-- ── Unmatched players: manual team assignment ────────────── -->
@@ -219,7 +349,6 @@ class UHC_Importer {
 					⚠ <?php printf( esc_html__( '%d Spieler ohne erkanntes Team — bitte manuell zuweisen', 'uhc-laupen-importer' ), count( $unmatched ) ); ?>
 				</h3>
 
-				<!-- Bulk assignment toolbar -->
 				<div class="uhc-importer__bulk-bar">
 					<label>
 						<input type="checkbox" id="uhc-select-all" />
@@ -230,9 +359,7 @@ class UHC_Importer {
 					<select id="uhc-bulk-team" class="uhc-importer__select">
 						<option value=""><?php esc_html_e( '— Team wählen —', 'uhc-laupen-importer' ); ?></option>
 						<?php foreach ( $all_teams as $tp ) : ?>
-							<option value="<?php echo esc_attr( $tp->ID ); ?>">
-								<?php echo esc_html( $tp->post_title ); ?>
-							</option>
+							<option value="<?php echo esc_attr( $tp->ID ); ?>"><?php echo esc_html( $tp->post_title ); ?></option>
 						<?php endforeach; ?>
 					</select>
 					<button type="button" id="uhc-bulk-apply" class="button">
@@ -249,30 +376,23 @@ class UHC_Importer {
 								<th><?php esc_html_e( 'Team (CSV)', 'uhc-laupen-importer' ); ?></th>
 								<th><?php esc_html_e( 'Position', 'uhc-laupen-importer' ); ?></th>
 								<th><?php esc_html_e( 'Nr.', 'uhc-laupen-importer' ); ?></th>
+								<th><?php esc_html_e( 'Bild', 'uhc-laupen-importer' ); ?></th>
 								<th><?php esc_html_e( 'Team manuell zuweisen', 'uhc-laupen-importer' ); ?></th>
 								<th><?php esc_html_e( 'Aktion', 'uhc-laupen-importer' ); ?></th>
 							</tr>
 						</thead>
 						<tbody>
 							<?php foreach ( $unmatched as $entry ) :
-								$row    = $entry['row'];
-								$index  = $entry['index'];
-								$status = $this->get_existing_spieler( $row['vorname'], $row['nachname'] );
+								$row   = $entry['row'];
+								$index = $entry['index'];
 							?>
 							<tr class="uhc-importer__row--warn" data-row-index="<?php echo esc_attr( $index ); ?>">
-								<td>
-									<input
-										type="checkbox"
-										class="uhc-row-check"
-										data-row="<?php echo esc_attr( $index ); ?>"
-									/>
-								</td>
+								<td><input type="checkbox" class="uhc-row-check" data-row="<?php echo esc_attr( $index ); ?>" /></td>
 								<td><strong><?php echo esc_html( $row['vorname'] . ' ' . $row['nachname'] ); ?></strong></td>
-								<td>
-									<em class="uhc-importer__csv-team"><?php echo esc_html( $row['team'] ?: '—' ); ?></em>
-								</td>
+								<td><em class="uhc-importer__csv-team"><?php echo esc_html( $row['team'] ?: '—' ); ?></em></td>
 								<td><?php echo esc_html( $row['position'] ); ?></td>
-								<td><?php echo esc_html( $row['spielernummer'] ); ?></td>
+								<td><?php echo esc_html( $row['spielernummer'] ?: '—' ); ?></td>
+								<td><?php echo $entry['photo'] ? '✓' : '—'; ?></td>
 								<td>
 									<select
 										name="uhc_team_override[<?php echo esc_attr( $index ); ?>]"
@@ -281,14 +401,12 @@ class UHC_Importer {
 									>
 										<option value=""><?php esc_html_e( '— Überspringen —', 'uhc-laupen-importer' ); ?></option>
 										<?php foreach ( $all_teams as $tp ) : ?>
-											<option value="<?php echo esc_attr( $tp->ID ); ?>">
-												<?php echo esc_html( $tp->post_title ); ?>
-											</option>
+											<option value="<?php echo esc_attr( $tp->ID ); ?>"><?php echo esc_html( $tp->post_title ); ?></option>
 										<?php endforeach; ?>
 									</select>
 								</td>
 								<td>
-									<?php if ( $status ) : ?>
+									<?php if ( $entry['existing'] ) : ?>
 										<span class="uhc-importer__badge uhc-importer__badge--update"><?php esc_html_e( 'Aktualisieren', 'uhc-laupen-importer' ); ?></span>
 									<?php else : ?>
 										<span class="uhc-importer__badge uhc-importer__badge--new"><?php esc_html_e( 'Neu erstellen', 'uhc-laupen-importer' ); ?></span>
@@ -317,22 +435,35 @@ class UHC_Importer {
 								<th><?php esc_html_e( 'Position', 'uhc-laupen-importer' ); ?></th>
 								<th><?php esc_html_e( 'Nr.', 'uhc-laupen-importer' ); ?></th>
 								<th><?php esc_html_e( 'Geburtsdatum', 'uhc-laupen-importer' ); ?></th>
+								<th><?php esc_html_e( 'Bild', 'uhc-laupen-importer' ); ?></th>
+								<th><?php esc_html_e( 'Sponsor', 'uhc-laupen-importer' ); ?></th>
 								<th><?php esc_html_e( 'Aktion', 'uhc-laupen-importer' ); ?></th>
 							</tr>
 						</thead>
 						<tbody>
 							<?php foreach ( $matched as $entry ) :
-								$row    = $entry['row'];
-								$status = $this->get_existing_spieler( $row['vorname'], $row['nachname'] );
+								$row = $entry['row'];
 							?>
 							<tr>
 								<td><strong><?php echo esc_html( $row['vorname'] . ' ' . $row['nachname'] ); ?></strong></td>
 								<td><span class="uhc-importer__badge uhc-importer__badge--ok">✓ <?php echo esc_html( $entry['team_post']->post_title ); ?></span></td>
 								<td><?php echo esc_html( $row['position'] ); ?></td>
-								<td><?php echo esc_html( $row['spielernummer'] ); ?></td>
-								<td><?php echo esc_html( $row['geburtsdatum'] ); ?></td>
+								<td><?php echo esc_html( $row['spielernummer'] ?: '—' ); ?></td>
+								<td><?php echo esc_html( $this->format_date( $row['geburtsdatum'] ) ); ?></td>
+								<td><?php echo $entry['photo'] ? '✓' : '—'; ?></td>
 								<td>
-									<?php if ( $status ) : ?>
+									<?php
+									if ( ! empty( $entry['sponsors']['ids'] ) ) {
+										echo '✓';
+									} elseif ( ! empty( $entry['sponsors']['missing'] ) ) {
+										echo '<span class="uhc-importer__badge uhc-importer__badge--warn">' . esc_html( implode( ', ', $entry['sponsors']['missing'] ) ) . '</span>';
+									} else {
+										echo '—';
+									}
+									?>
+								</td>
+								<td>
+									<?php if ( $entry['existing'] ) : ?>
 										<span class="uhc-importer__badge uhc-importer__badge--update"><?php esc_html_e( 'Aktualisieren', 'uhc-laupen-importer' ); ?></span>
 									<?php else : ?>
 										<span class="uhc-importer__badge uhc-importer__badge--new"><?php esc_html_e( 'Neu erstellen', 'uhc-laupen-importer' ); ?></span>
@@ -360,33 +491,63 @@ class UHC_Importer {
 					array( 'style' => 'margin-left: 8px;' )
 				); ?>
 			</p>
-
 		</form>
+
+		<?php if ( empty( $resolved['spielernummer'] ) ) : ?>
+		<!-- Separate form so choosing a column re-analyses instead of importing. -->
+		<div class="uhc-importer__card">
+			<form method="post" action="">
+				<?php wp_nonce_field( 'uhc_import_action', 'uhc_import_nonce' ); ?>
+				<input type="hidden" name="uhc_import_step" value="preview" />
+				<input type="hidden" name="uhc_file_token" value="<?php echo esc_attr( $token ); ?>" />
+				<input type="hidden" name="uhc_mode" value="<?php echo esc_attr( $mode ); ?>" />
+				<?php if ( $dry_run ) : ?><input type="hidden" name="uhc_dry_run" value="1" /><?php endif; ?>
+				<label for="uhc_number_column"><strong><?php esc_html_e( 'Spalte für die Rückennummer:', 'uhc-laupen-importer' ); ?></strong></label>
+				<select name="uhc_number_column" id="uhc_number_column" class="uhc-importer__select">
+					<option value=""><?php esc_html_e( '— keine —', 'uhc-laupen-importer' ); ?></option>
+					<?php foreach ( $headers as $header ) : ?>
+						<option value="<?php echo esc_attr( $header ); ?>"><?php echo esc_html( $header ); ?></option>
+					<?php endforeach; ?>
+				</select>
+				<?php submit_button( __( 'Erneut analysieren', 'uhc-laupen-importer' ), 'secondary', 'submit', false ); ?>
+			</form>
+		</div>
+		<?php endif; ?>
 		<?php
 	}
 
 	// ── Step 3: Import ────────────────────────────────────────────────────
 
 	private function step_import() {
-		$dry_run   = '1' === sanitize_text_field( wp_unslash( $_POST['uhc_dry_run'] ?? '0' ) );
-		$encoded   = sanitize_text_field( wp_unslash( $_POST['uhc_import_data'] ?? '' ) );
-		$rows      = json_decode( base64_decode( $encoded ), true );
-		$overrides = isset( $_POST['uhc_team_override'] ) && is_array( $_POST['uhc_team_override'] )
-			? array_map( 'absint', $_POST['uhc_team_override'] )
+		$mode          = $this->get_mode();
+		$dry_run       = '1' === sanitize_text_field( wp_unslash( $_POST['uhc_dry_run'] ?? '0' ) );
+		$token         = isset( $_POST['uhc_file_token'] ) ? sanitize_file_name( wp_unslash( $_POST['uhc_file_token'] ) ) : '';
+		$number_column = isset( $_POST['uhc_number_column'] ) ? sanitize_text_field( wp_unslash( $_POST['uhc_number_column'] ) ) : '';
+		$confirmed     = ! empty( $_POST['uhc_confirm_delete'] );
+		$overrides     = isset( $_POST['uhc_team_override'] ) && is_array( $_POST['uhc_team_override'] )
+			? array_map( 'absint', wp_unslash( $_POST['uhc_team_override'] ) )
 			: array();
 
-		if ( ! is_array( $rows ) || empty( $rows ) ) {
-			echo '<div class="notice notice-error"><p>' . esc_html__( 'Keine Daten zum Importieren.', 'uhc-laupen-importer' ) . '</p></div>';
+		$path = $this->token_path( $token );
+		if ( ! $path ) {
+			echo '<div class="notice notice-error"><p>' . esc_html__( 'Die hochgeladene Datei ist nicht mehr verfügbar. Bitte starte den Import neu.', 'uhc-laupen-importer' ) . '</p></div>';
 			return;
 		}
+
+		$parser = new UHC_CSV_Parser();
+		$parsed = $parser->parse( $path, $number_column );
+		if ( is_wp_error( $parsed ) ) {
+			echo '<div class="notice notice-error"><p>' . esc_html( $parsed->get_error_message() ) . '</p></div>';
+			return;
+		}
+		$rows = $parsed['rows'];
 
 		// Merge manual team overrides into the rows.
 		foreach ( $overrides as $index => $team_id ) {
 			if ( isset( $rows[ $index ] ) && $team_id > 0 ) {
 				$team_post = get_post( $team_id );
 				if ( $team_post ) {
-					// Replace the CSV team name with the manually selected team post title.
-					$rows[ $index ]['team']            = $team_post->post_title;
+					$rows[ $index ]['team']             = $team_post->post_title;
 					$rows[ $index ]['team_id_override'] = $team_id;
 				}
 			}
@@ -398,10 +559,41 @@ class UHC_Importer {
 			$results[] = $writer->write( $row );
 		}
 
+		// Fresh import: trash everyone who is not part of this file.
+		$trashed     = array();
+		$trash_notice = '';
+		if ( self::MODE_FRESH === $mode ) {
+			$to_trash = $this->players_to_trash( $writer->get_touched_ids() );
+			if ( $dry_run ) {
+				$trash_notice = sprintf(
+					/* translators: %d: number of players */
+					__( '(Probelauf) %d Spieler würden in den Papierkorb verschoben.', 'uhc-laupen-importer' ),
+					count( $to_trash )
+				);
+			} elseif ( ! $confirmed ) {
+				$trash_notice = __( 'Bestätigung fehlt — es wurden keine Spieler entfernt.', 'uhc-laupen-importer' );
+			} else {
+				foreach ( $to_trash as $player ) {
+					if ( wp_trash_post( $player->ID ) ) {
+						$trashed[] = $player->post_title;
+					}
+				}
+				$trash_notice = sprintf(
+					/* translators: %d: number of players */
+					__( '%d Spieler in den Papierkorb verschoben.', 'uhc-laupen-importer' ),
+					count( $trashed )
+				);
+			}
+		}
+
+		if ( ! $dry_run ) {
+			$this->delete_token_file( $token );
+		}
+
 		$created = count( array_filter( $results, fn( $r ) => 'created' === $r['status'] ) );
 		$updated = count( array_filter( $results, fn( $r ) => 'updated' === $r['status'] ) );
 		$failed  = count( array_filter( $results, fn( $r ) => 'error'   === $r['status'] ) );
-		$skipped = count( array_filter( $results, fn( $r ) => 'skipped' === $r['status'] ) );
+		$photos  = count( array_filter( $results, fn( $r ) => ! empty( $r['photo'] ) ) );
 		?>
 
 		<div class="uhc-importer__notice uhc-importer__notice--<?php echo $failed ? 'warn' : 'success'; ?>">
@@ -411,9 +603,12 @@ class UHC_Importer {
 				<strong><?php esc_html_e( 'Import abgeschlossen.', 'uhc-laupen-importer' ); ?></strong><br>
 			<?php endif; ?>
 			<?php printf(
-				esc_html__( 'Erstellt: %1$d | Aktualisiert: %2$d | Übersprungen: %3$d | Fehler: %4$d', 'uhc-laupen-importer' ),
-				$created, $updated, $skipped, $failed
+				esc_html__( 'Erstellt: %1$d | Aktualisiert: %2$d | Fehler: %3$d | Spielerbilder verknüpft: %4$d', 'uhc-laupen-importer' ),
+				$created, $updated, $failed, $photos
 			); ?>
+			<?php if ( $trash_notice ) : ?>
+				<br><?php echo esc_html( $trash_notice ); ?>
+			<?php endif; ?>
 		</div>
 
 		<div class="uhc-importer__card">
@@ -423,6 +618,7 @@ class UHC_Importer {
 						<th><?php esc_html_e( 'Name', 'uhc-laupen-importer' ); ?></th>
 						<th><?php esc_html_e( 'Ergebnis', 'uhc-laupen-importer' ); ?></th>
 						<th><?php esc_html_e( 'Team verknüpft', 'uhc-laupen-importer' ); ?></th>
+						<th><?php esc_html_e( 'Bild', 'uhc-laupen-importer' ); ?></th>
 						<th><?php esc_html_e( 'Details', 'uhc-laupen-importer' ); ?></th>
 					</tr>
 				</thead>
@@ -432,6 +628,7 @@ class UHC_Importer {
 						<td><strong><?php echo esc_html( $r['name'] ); ?></strong></td>
 						<td><span class="uhc-importer__badge uhc-importer__badge--<?php echo esc_attr( $r['status'] ); ?>"><?php echo esc_html( $r['status_label'] ); ?></span></td>
 						<td><?php echo esc_html( $r['team_title'] ?? '—' ); ?></td>
+						<td><?php echo ! empty( $r['photo'] ) ? '✓' : '—'; ?></td>
 						<td><?php echo esc_html( $r['message'] ?? '' ); ?></td>
 					</tr>
 					<?php endforeach; ?>
@@ -454,24 +651,103 @@ class UHC_Importer {
 
 	// ── Helpers ───────────────────────────────────────────────────────────
 
-	public function find_team_post( $team_name ) {
-		if ( empty( $team_name ) ) return null;
-		$posts = get_posts( array(
-			'post_type'              => 'team',
-			'post_status'            => 'publish',
-			'title'                  => trim( $team_name ),
-			'posts_per_page'         => 1,
+	/**
+	 * Selected import mode, defaulting to the safe "update".
+	 *
+	 * @return string
+	 */
+	private function get_mode() {
+		$mode = isset( $_POST['uhc_mode'] ) ? sanitize_key( wp_unslash( $_POST['uhc_mode'] ) ) : self::MODE_UPDATE;
+		return self::MODE_FRESH === $mode ? self::MODE_FRESH : self::MODE_UPDATE;
+	}
+
+	/**
+	 * Published players that are NOT in the given keep-list.
+	 *
+	 * @param int[] $keep_ids Post IDs to keep.
+	 * @return WP_Post[]
+	 */
+	private function players_to_trash( $keep_ids ) {
+		$keep    = array_map( 'intval', (array) $keep_ids );
+		$players = get_posts( array(
+			'post_type'              => 'spieler',
+			'post_status'            => array( 'publish', 'draft', 'pending', 'private' ),
+			'posts_per_page'         => -1,
+			'orderby'                => 'title',
+			'order'                  => 'ASC',
 			'update_post_meta_cache' => false,
 			'update_post_term_cache' => false,
 		) );
-		return ! empty( $posts ) ? $posts[0] : null;
+
+		return array_values( array_filter( $players, fn( $p ) => ! in_array( (int) $p->ID, $keep, true ) ) );
+	}
+
+	/**
+	 * Move an uploaded CSV to a private temp file and return its token.
+	 *
+	 * @param string $tmp_name PHP upload tmp path.
+	 * @return string|WP_Error Token, or error.
+	 */
+	private function store_upload( $tmp_name ) {
+		if ( ! is_uploaded_file( $tmp_name ) ) {
+			return new WP_Error( 'upload_invalid', __( 'Ungültiger Upload.', 'uhc-laupen-importer' ) );
+		}
+		$token = 'uhc-import-' . wp_generate_password( 16, false ) . '.csv';
+		$dest  = trailingslashit( get_temp_dir() ) . $token;
+		if ( ! @move_uploaded_file( $tmp_name, $dest ) ) {
+			return new WP_Error( 'upload_move_failed', __( 'Die Datei konnte nicht zwischengespeichert werden.', 'uhc-laupen-importer' ) );
+		}
+		return $token;
+	}
+
+	/**
+	 * Resolve a token into a readable temp file path.
+	 *
+	 * @param string $token File token.
+	 * @return string|null Absolute path, or null when unavailable.
+	 */
+	private function token_path( $token ) {
+		if ( ! $token || ! preg_match( '/^uhc-import-[A-Za-z0-9]+\.csv$/', $token ) ) {
+			return null;
+		}
+		$path = trailingslashit( get_temp_dir() ) . $token;
+		return file_exists( $path ) && is_readable( $path ) ? $path : null;
+	}
+
+	/**
+	 * Remove the temp file after a completed import.
+	 *
+	 * @param string $token File token.
+	 */
+	private function delete_token_file( $token ) {
+		$path = $this->token_path( $token );
+		if ( $path ) {
+			@unlink( $path );
+		}
+	}
+
+	/**
+	 * Format a stored Ymd date for display.
+	 *
+	 * @param string $ymd Date in Ymd.
+	 * @return string
+	 */
+	private function format_date( $ymd ) {
+		if ( ! $ymd || ! preg_match( '/^\d{8}$/', $ymd ) ) {
+			return $ymd ?: '—';
+		}
+		return substr( $ymd, 6, 2 ) . '.' . substr( $ymd, 4, 2 ) . '.' . substr( $ymd, 0, 4 );
+	}
+
+	public function find_team_post( $team_name ) {
+		return UHC_Player_Writer::find_team( $team_name );
 	}
 
 	public function get_existing_spieler( $vorname, $nachname ) {
 		$title = trim( $vorname . ' ' . $nachname );
 		$posts = get_posts( array(
 			'post_type'              => 'spieler',
-			'post_status'            => array( 'publish', 'draft' ),
+			'post_status'            => array( 'publish', 'draft', 'pending', 'private' ),
 			'title'                  => $title,
 			'posts_per_page'         => 1,
 			'update_post_meta_cache' => false,

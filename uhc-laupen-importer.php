@@ -22,6 +22,7 @@ define( 'UHC_IMPORTER_DIR', plugin_dir_path( __FILE__ ) );
 require_once UHC_IMPORTER_DIR . 'includes/class-uhc-importer.php';
 require_once UHC_IMPORTER_DIR . 'includes/class-uhc-importer-settings.php';
 require_once UHC_IMPORTER_DIR . 'includes/class-uhc-csv-parser.php';
+require_once UHC_IMPORTER_DIR . 'includes/class-uhc-media-matcher.php';
 require_once UHC_IMPORTER_DIR . 'includes/class-uhc-player-writer.php';
 
 new UHC_Importer_Settings();
