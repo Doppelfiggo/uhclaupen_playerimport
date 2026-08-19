@@ -43,6 +43,7 @@ class UHC_Importer {
 	public function enqueue_assets( $hook ) {
 		$our_hooks = array(
 			'tools_page_uhc-spieler-import',
+			'tools_page_uhc-spieler-import-check',
 			'settings_page_uhc-spieler-import-settings',
 		);
 		if ( ! in_array( $hook, $our_hooks, true ) ) {
@@ -96,6 +97,11 @@ class UHC_Importer {
 		$published    = isset( $player_count->publish ) ? (int) $player_count->publish : 0;
 		?>
 		<p><?php esc_html_e( 'Lade eine CSV-Exportdatei aus ClubDesk hoch. Spieler werden automatisch mit dem passenden Team, dem Spielerbild und dem Sponsorenbild verknüpft.', 'uhc-laupen-importer' ); ?></p>
+		<p class="description">
+			<?php esc_html_e( 'Vor dem Saisonimport lohnt sich der', 'uhc-laupen-importer' ); ?>
+			<a href="<?php echo esc_url( admin_url( 'tools.php?page=uhc-spieler-import-check' ) ); ?>"><?php esc_html_e( 'Systemcheck', 'uhc-laupen-importer' ); ?></a>
+			— <?php esc_html_e( 'er prüft Import, Teams und die Swiss-Unihockey-Schnittstelle, ohne Daten zu verändern.', 'uhc-laupen-importer' ); ?>
+		</p>
 
 		<div class="uhc-importer__card">
 			<form method="post" enctype="multipart/form-data" action="">

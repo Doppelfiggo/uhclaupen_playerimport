@@ -1,0 +1,8 @@
+Benutzer-Id;Vorname;Nachname;Gruppe;Funktion;Rückennummer;Nationalität;Geburtsdatum;Team;E-Mail;Sponsor;Bemerkungen
+t.muster;Tim;Muster;Spieler Herren 1;Feldspieler;46.0;CH;26.08.1996;Herren 1;tim.muster@example.test;;"Erste Zeile
+Zweite Zeile"
+a.beispiel;Anna;Künzler-Beispiel;Spieler Damen 1;Torhüter;1;CH;1999-01-05;Damen 1;;Musterbank AG;
+p.muster;Peter;Mustertrainer;Spieler Herren 1;Cheftrainer;0;;;Herren 1;;;
+s.muster;Sara;Musterbetreuerin;Staff Herren 1;Betreuerin;;CH;03/07/1988;;;;
+m.passiv;Max;Passivmitglied;Passivmitglied;;;CH;01.01.1970;Herren 1;;;
+;;;Spieler Herren 1;Feldspieler;99;CH;;Herren 1;;;

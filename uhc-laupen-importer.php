@@ -24,6 +24,9 @@ require_once UHC_IMPORTER_DIR . 'includes/class-uhc-importer-settings.php';
 require_once UHC_IMPORTER_DIR . 'includes/class-uhc-csv-parser.php';
 require_once UHC_IMPORTER_DIR . 'includes/class-uhc-media-matcher.php';
 require_once UHC_IMPORTER_DIR . 'includes/class-uhc-player-writer.php';
+require_once UHC_IMPORTER_DIR . 'includes/class-uhc-healthcheck.php';
+require_once UHC_IMPORTER_DIR . 'includes/class-uhc-healthcheck-page.php';
 
 new UHC_Importer_Settings();
 new UHC_Importer();
+new UHC_Healthcheck_Page();
