@@ -809,7 +809,9 @@ class UHC_Healthcheck {
 
 		// 2. Configured season. The Swiss season is named after its starting
 		//    year and begins in the summer.
-		$season   = (int) get_option( 'swissfloorball_actual_season', gmdate( 'Y' ) );
+		$season   = function_exists( 'uhc_laupen_season' )
+			? uhc_laupen_season()
+			: (int) get_option( 'swissfloorball_actual_season', gmdate( 'Y' ) );
 		$expected = (int) gmdate( 'm' ) >= 7 ? (int) gmdate( 'Y' ) : (int) gmdate( 'Y' ) - 1;
 
 		if ( $season === $expected ) {
@@ -820,7 +822,7 @@ class UHC_Healthcheck {
 				__( 'Eingestellte Saison', 'uhc-laupen-importer' ),
 				sprintf(
 					/* translators: 1: configured season, 2: expected season */
-					__( 'Eingestellt: %1$d, erwartet: %2$d — unter Swiss Floorball API → Einstellungen anpassen.', 'uhc-laupen-importer' ),
+					__( 'Eingestellt: %1$d, erwartet: %2$d — im Customizer unter „Swiss Unihockey Team IDs“ anpassen.', 'uhc-laupen-importer' ),
 					$season,
 					$expected
 				)
@@ -830,7 +832,9 @@ class UHC_Healthcheck {
 		// 3. Club statistics — also gives us every team of the club, which the
 		//    front page configuration is checked against further down.
 		$club_teams = array();
-		$club       = get_option( 'swissfloorball_club_number', '' );
+		$club       = function_exists( 'uhc_laupen_club_number' )
+			? uhc_laupen_club_number()
+			: get_option( 'swissfloorball_club_number', '' );
 		if ( $club ) {
 			$stats = $this->api_get( 'clubs/' . rawurlencode( $club ) . '/statistics' );
 			if ( is_wp_error( $stats ) ) {
