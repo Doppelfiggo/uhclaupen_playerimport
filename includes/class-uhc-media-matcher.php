@@ -61,6 +61,16 @@ class UHC_Media_Matcher {
 			trim( $nachname . '.' . $vorname ),
 			trim( $nachname . ' ' . $vorname ),
 		);
+
+		// Middle names ("Mia Sarina Lilljeqvist") — photo files usually use
+		// only the everyday first name ("10_mia_lilljeqvist"), so also try
+		// the first word of the first name alone.
+		$first = trim( (string) strtok( trim( $vorname ), " \t" ) );
+		if ( $first && $first !== trim( $vorname ) ) {
+			$candidates[] = $first . '.' . $nachname;
+			$candidates[] = $nachname . '.' . $first;
+		}
+
 		if ( $benutzer_id ) {
 			array_unshift( $candidates, $benutzer_id );
 		}
@@ -133,11 +143,34 @@ class UHC_Media_Matcher {
 			$names = array();
 
 			if ( $row->file ) {
-				$base = pathinfo( $row->file, PATHINFO_FILENAME );
-				// Strip WordPress size ("-300x300") and duplicate ("-1") suffixes.
+				$base    = pathinfo( $row->file, PATHINFO_FILENAME );
 				$names[] = $base;
-				$names[] = preg_replace( '/-\d+x\d+$/', '', $base );
-				$names[] = preg_replace( '/-\d+$/', '', preg_replace( '/-\d+x\d+$/', '', $base ) );
+
+				// Iteratively strip WordPress suffixes from the end, in any
+				// order/combination: size ("-300x300"), duplicate ("-1") and
+				// big-image ("-scaled") — "Sabrina-Aerne-300x300-1" needs two
+				// passes, "17_jessica_riedi-scaled" one.
+				$stripped = $base;
+				do {
+					$prev     = $stripped;
+					$stripped = preg_replace( '/(?:-scaled|-\d+x\d+|-\d+)$/', '', $stripped );
+				} while ( $stripped !== $prev );
+				$names[] = $stripped;
+
+				// Live photo naming conventions around the plain name:
+				// - jersey-number prefix: "12_lara_abderhalden"
+				// - staff prefix:         "Staff-Yves-Kempf-Headcoach"
+				// - role suffix:          "hanka_lackova_trainer.h1",
+				//                         "Remo-Zysset-Assistenzcoach",
+				//                         "leana_schoch_vorstand"
+				// - percent-size suffix:  "Kempf_Yves_50p"
+				$plain = preg_replace( '/^\d+[_-]+/', '', $stripped );
+				$plain = preg_replace( '/^staff[_-]+/i', '', $plain );
+				$plain = preg_replace( '/[_\-. ]+(trainer|assistenzcoach|headcoach|goalitrainer|coach|vorstand|staff)\b.*$/i', '', $plain );
+				$plain = preg_replace( '/[_-]+\d+p$/i', '', $plain );
+				if ( $plain !== $stripped ) {
+					$names[] = $plain;
+				}
 			}
 			$names[] = $row->post_title;
 			$names[] = $row->post_name;
