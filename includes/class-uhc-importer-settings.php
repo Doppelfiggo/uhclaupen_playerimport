@@ -21,6 +21,12 @@ class UHC_Importer_Settings {
 	/** Option key used to store the allowed user IDs. */
 	const OPTION_KEY = 'uhc_importer_allowed_users';
 
+	/** FileBird folder to search for player photos (0 = whole library). */
+	const PLAYER_FOLDER_KEY = 'uhc_importer_player_folder';
+
+	/** FileBird folder to search for sponsor logos (0 = whole library). */
+	const SPONSOR_FOLDER_KEY = 'uhc_importer_sponsor_folder';
+
 	public function __construct() {
 		add_action( 'admin_menu', array( $this, 'register_menu' ) );
 		add_action( 'admin_init', array( $this, 'handle_save' ) );
@@ -69,6 +75,10 @@ class UHC_Importer_Settings {
 		$clean = array_values( $clean );       // Re-index.
 
 		update_option( self::OPTION_KEY, $clean );
+
+		// Image search folders (FileBird). 0 = whole library.
+		update_option( self::PLAYER_FOLDER_KEY, isset( $_POST['uhc_player_folder'] ) ? absint( $_POST['uhc_player_folder'] ) : 0 );
+		update_option( self::SPONSOR_FOLDER_KEY, isset( $_POST['uhc_sponsor_folder'] ) ? absint( $_POST['uhc_sponsor_folder'] ) : 0 );
 
 		// Redirect back with a success flag.
 		wp_safe_redirect( add_query_arg(
@@ -156,6 +166,43 @@ class UHC_Importer_Settings {
 						</div>
 					<?php endif; ?>
 
+					<h2 style="margin-top:32px"><?php esc_html_e( 'Bilder-Suchordner (FileBird)', 'uhc-laupen-importer' ); ?></h2>
+
+					<p class="description">
+						<?php esc_html_e( 'Optional: Beschränke die Bildsuche des Importers auf je einen FileBird-Ordner (inkl. Unterordner). Ohne Auswahl wird die gesamte Mediathek durchsucht. Mit getrennten Ordnern wird z.B. das Portrait einer Spielerin nie als Sponsorenlogo verlinkt, auch wenn beide gleich heissen.', 'uhc-laupen-importer' ); ?>
+					</p>
+
+					<?php $folders = self::filebird_folders(); ?>
+
+					<?php if ( null === $folders ) : ?>
+						<p><em><?php esc_html_e( 'FileBird ist nicht aktiv — es wird immer die gesamte Mediathek durchsucht.', 'uhc-laupen-importer' ); ?></em></p>
+					<?php else : ?>
+						<table class="form-table" role="presentation">
+							<tr>
+								<th scope="row">
+									<label for="uhc_player_folder"><?php esc_html_e( 'Spielerbilder', 'uhc-laupen-importer' ); ?></label>
+								</th>
+								<td>
+									<select name="uhc_player_folder" id="uhc_player_folder">
+										<option value="0"><?php esc_html_e( '— Gesamte Mediathek —', 'uhc-laupen-importer' ); ?></option>
+										<?php self::folder_options( $folders, self::get_player_folder() ); ?>
+									</select>
+								</td>
+							</tr>
+							<tr>
+								<th scope="row">
+									<label for="uhc_sponsor_folder"><?php esc_html_e( 'Sponsorenlogos', 'uhc-laupen-importer' ); ?></label>
+								</th>
+								<td>
+									<select name="uhc_sponsor_folder" id="uhc_sponsor_folder">
+										<option value="0"><?php esc_html_e( '— Gesamte Mediathek —', 'uhc-laupen-importer' ); ?></option>
+										<?php self::folder_options( $folders, self::get_sponsor_folder() ); ?>
+									</select>
+								</td>
+							</tr>
+						</table>
+					<?php endif; ?>
+
 					<p class="uhc-importer__actions" style="margin-top:24px">
 						<?php submit_button( __( 'Berechtigungen speichern', 'uhc-laupen-importer' ), 'primary', 'submit', false ); ?>
 						<a
@@ -191,6 +238,78 @@ class UHC_Importer_Settings {
 	public static function get_allowed_users() {
 		$option = get_option( self::OPTION_KEY, array() );
 		return is_array( $option ) ? array_map( 'absint', $option ) : array();
+	}
+
+	/**
+	 * FileBird folder configured for player photos (0 = whole library).
+	 *
+	 * @return int
+	 */
+	public static function get_player_folder() {
+		return absint( get_option( self::PLAYER_FOLDER_KEY, 0 ) );
+	}
+
+	/**
+	 * FileBird folder configured for sponsor logos (0 = whole library).
+	 *
+	 * @return int
+	 */
+	public static function get_sponsor_folder() {
+		return absint( get_option( self::SPONSOR_FOLDER_KEY, 0 ) );
+	}
+
+	/**
+	 * All FileBird folders as a parent => children map for tree rendering,
+	 * or null when FileBird's table doesn't exist.
+	 *
+	 * @return array{by_parent:array<int,array>,names:array<int,string>}|null
+	 */
+	private static function filebird_folders() {
+		global $wpdb;
+
+		$table = $wpdb->prefix . 'fbv';
+		if ( $table !== $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $table ) ) ) {
+			return null;
+		}
+
+		$rows = $wpdb->get_results( "SELECT id, name, parent FROM {$table} ORDER BY parent, name", ARRAY_A );
+		if ( empty( $rows ) ) {
+			return null;
+		}
+
+		$by_parent = array();
+		$names     = array();
+		foreach ( $rows as $row ) {
+			$by_parent[ (int) $row['parent'] ][] = (int) $row['id'];
+			$names[ (int) $row['id'] ]           = wp_specialchars_decode( $row['name'] );
+		}
+
+		return array( 'by_parent' => $by_parent, 'names' => $names );
+	}
+
+	/**
+	 * Echo the <option> tree for a folder select, depth-first with indentation.
+	 *
+	 * @param array $folders  Result of filebird_folders().
+	 * @param int   $selected Currently selected folder ID.
+	 * @param int   $parent   Internal recursion pointer.
+	 * @param int   $depth    Internal recursion depth.
+	 */
+	private static function folder_options( $folders, $selected, $parent = 0, $depth = 0 ) {
+		if ( empty( $folders['by_parent'][ $parent ] ) ) {
+			return;
+		}
+
+		foreach ( $folders['by_parent'][ $parent ] as $id ) {
+			printf(
+				'<option value="%d"%s>%s%s</option>',
+				(int) $id,
+				selected( $selected, $id, false ),
+				esc_html( str_repeat( '— ', $depth ) ),
+				esc_html( $folders['names'][ $id ] )
+			);
+			self::folder_options( $folders, $selected, $id, $depth + 1 );
+		}
 	}
 
 	/**

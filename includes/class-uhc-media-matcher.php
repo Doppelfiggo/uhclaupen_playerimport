@@ -18,25 +18,28 @@ if ( ! defined( 'ABSPATH' ) ) {
 class UHC_Media_Matcher {
 
 	/**
-	 * normalised name => attachment ID.
+	 * Lookup tables, one per search scope:
+	 * FileBird folder ID (0 = whole library) => [ normalised name => attachment ID ].
 	 *
-	 * @var array|null
+	 * @var array<int,array<string,int>>
 	 */
-	private static $index = null;
+	private static $indexes = array();
 
 	/**
 	 * Find an attachment whose file name matches the given name.
 	 *
-	 * @param string $name Name to look for, e.g. "Dominic Künzler" or "Raiffeisen".
+	 * @param string $name      Name to look for, e.g. "Dominic Künzler" or "Raiffeisen".
+	 * @param int    $folder_id Optional FileBird folder ID — restricts the search
+	 *                          to that folder and its subfolders. 0 = whole library.
 	 * @return int Attachment ID, or 0 when nothing matches.
 	 */
-	public static function find( $name ) {
+	public static function find( $name, $folder_id = 0 ) {
 		$name = trim( (string) $name );
 		if ( '' === $name ) {
 			return 0;
 		}
 
-		$index = self::index();
+		$index = self::index( (int) $folder_id );
 		foreach ( self::variants( $name ) as $variant ) {
 			if ( isset( $index[ $variant ] ) ) {
 				return $index[ $variant ];
@@ -75,8 +78,13 @@ class UHC_Media_Matcher {
 			array_unshift( $candidates, $benutzer_id );
 		}
 
+		// Optional FileBird scope (settings page): only search the configured
+		// player folder — keeps a player photo from being confused with a
+		// same-named sponsor logo (and vice versa).
+		$folder = self::configured_folder( 'player' );
+
 		foreach ( $candidates as $candidate ) {
-			$id = self::find( $candidate );
+			$id = self::find( $candidate, $folder );
 			if ( $id ) {
 				return $id;
 			}
@@ -102,12 +110,15 @@ class UHC_Media_Matcher {
 		$ids     = array();
 		$missing = array();
 
+		// Optional FileBird scope (settings page) — see find_player_photo().
+		$folder = self::configured_folder( 'sponsor' );
+
 		foreach ( $names as $name ) {
 			$name = trim( $name );
 			if ( '' === $name ) {
 				continue;
 			}
-			$id = self::find( $name );
+			$id = self::find( $name, $folder );
 			if ( $id ) {
 				$ids[] = $id;
 			} else {
@@ -119,24 +130,63 @@ class UHC_Media_Matcher {
 	}
 
 	/**
-	 * Build (once per request) the lookup table of all attachments.
+	 * The FileBird folder configured for a lookup type, from the settings page.
 	 *
+	 * @param string $type 'player' or 'sponsor'.
+	 * @return int FileBird folder ID, 0 = whole library.
+	 */
+	private static function configured_folder( $type ) {
+		if ( ! class_exists( 'UHC_Importer_Settings' ) ) {
+			return 0;
+		}
+
+		return 'sponsor' === $type
+			? UHC_Importer_Settings::get_sponsor_folder()
+			: UHC_Importer_Settings::get_player_folder();
+	}
+
+	/**
+	 * Build (once per request and scope) the lookup table of attachments.
+	 *
+	 * @param int $folder_id FileBird folder scope, 0 = whole library.
 	 * @return array normalised name => attachment ID.
 	 */
-	private static function index() {
-		if ( null !== self::$index ) {
-			return self::$index;
+	private static function index( $folder_id = 0 ) {
+		$folder_id = max( 0, (int) $folder_id );
+
+		if ( isset( self::$indexes[ $folder_id ] ) ) {
+			return self::$indexes[ $folder_id ];
 		}
 
 		global $wpdb;
-		self::$index = array();
+
+		$where = '';
+		if ( $folder_id > 0 ) {
+			$subtree = self::filebird_subtree( $folder_id );
+
+			if ( null === $subtree ) {
+				// FileBird is gone or the folder was deleted — the scope can't
+				// be applied, so behave like "whole library" instead of
+				// silently matching nothing.
+				self::$indexes[ $folder_id ] = self::index( 0 );
+				return self::$indexes[ $folder_id ];
+			}
+
+			$in    = implode( ',', array_map( 'intval', $subtree ) );
+			$where = " AND p.ID IN (
+				SELECT attachment_id FROM {$wpdb->prefix}fbv_attachment_folder
+				 WHERE folder_id IN ( {$in} )
+			)";
+		}
+
+		self::$indexes[ $folder_id ] = array();
 
 		$rows = $wpdb->get_results(
 			"SELECT p.ID, p.post_title, p.post_name, m.meta_value AS file
 			   FROM {$wpdb->posts} p
 			   LEFT JOIN {$wpdb->postmeta} m
 			          ON m.post_id = p.ID AND m.meta_key = '_wp_attached_file'
-			  WHERE p.post_type = 'attachment'"
+			  WHERE p.post_type = 'attachment'{$where}"
 		);
 
 		foreach ( $rows as $row ) {
@@ -178,14 +228,58 @@ class UHC_Media_Matcher {
 			foreach ( array_filter( array_unique( $names ) ) as $name ) {
 				foreach ( self::variants( $name ) as $variant ) {
 					// Keep the first (usually the original upload) on collisions.
-					if ( ! isset( self::$index[ $variant ] ) ) {
-						self::$index[ $variant ] = (int) $row->ID;
+					if ( ! isset( self::$indexes[ $folder_id ][ $variant ] ) ) {
+						self::$indexes[ $folder_id ][ $variant ] = (int) $row->ID;
 					}
 				}
 			}
 		}
 
-		return self::$index;
+		return self::$indexes[ $folder_id ];
+	}
+
+	/**
+	 * All FileBird folder IDs in the subtree of the given folder (itself
+	 * included), or null when FileBird's tables are missing or the folder
+	 * doesn't exist (deleted after being configured).
+	 *
+	 * @param int $folder_id FileBird folder ID.
+	 * @return int[]|null
+	 */
+	private static function filebird_subtree( $folder_id ) {
+		global $wpdb;
+
+		$table = $wpdb->prefix . 'fbv';
+		if ( $table !== $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $table ) ) ) {
+			return null;
+		}
+
+		$rows = $wpdb->get_results( "SELECT id, parent FROM {$table}", ARRAY_A );
+
+		$children = array();
+		$known    = array();
+		foreach ( (array) $rows as $row ) {
+			$known[ (int) $row['id'] ]        = true;
+			$children[ (int) $row['parent'] ][] = (int) $row['id'];
+		}
+
+		if ( ! isset( $known[ $folder_id ] ) ) {
+			return null;
+		}
+
+		$subtree = array();
+		$queue   = array( $folder_id );
+		while ( $queue ) {
+			$id        = array_shift( $queue );
+			$subtree[] = $id;
+			if ( isset( $children[ $id ] ) ) {
+				foreach ( $children[ $id ] as $child ) {
+					$queue[] = $child;
+				}
+			}
+		}
+
+		return $subtree;
 	}
 
 	/**
@@ -225,9 +319,9 @@ class UHC_Media_Matcher {
 	}
 
 	/**
-	 * Reset the cached index (used after uploads during a long-running import).
+	 * Reset the cached indexes (used after uploads during a long-running import).
 	 */
 	public static function flush() {
-		self::$index = null;
+		self::$indexes = array();
 	}
 }
