@@ -145,6 +145,30 @@ class UHC_Importer {
 						</td>
 					</tr>
 					<tr>
+						<th><?php esc_html_e( 'Bilder-Suchordner', 'uhc-laupen-importer' ); ?></th>
+						<td>
+							<?php $folders = UHC_Importer_Settings::filebird_folders(); ?>
+							<?php if ( null === $folders ) : ?>
+								<p class="description"><?php esc_html_e( 'FileBird ist nicht aktiv — es wird die gesamte Mediathek durchsucht.', 'uhc-laupen-importer' ); ?></p>
+							<?php else : ?>
+								<fieldset>
+									<label for="uhc_player_folder" style="display:inline-block;min-width:120px"><?php esc_html_e( 'Spielerbilder', 'uhc-laupen-importer' ); ?></label>
+									<select name="uhc_player_folder" id="uhc_player_folder">
+										<option value="0"><?php esc_html_e( '— Gesamte Mediathek —', 'uhc-laupen-importer' ); ?></option>
+										<?php UHC_Importer_Settings::folder_options( $folders, UHC_Importer_Settings::get_player_folder() ); ?>
+									</select>
+									<br />
+									<label for="uhc_sponsor_folder" style="display:inline-block;min-width:120px;margin-top:6px"><?php esc_html_e( 'Sponsorenlogos', 'uhc-laupen-importer' ); ?></label>
+									<select name="uhc_sponsor_folder" id="uhc_sponsor_folder">
+										<option value="0"><?php esc_html_e( '— Gesamte Mediathek —', 'uhc-laupen-importer' ); ?></option>
+										<?php UHC_Importer_Settings::folder_options( $folders, UHC_Importer_Settings::get_sponsor_folder() ); ?>
+									</select>
+								</fieldset>
+								<p class="description"><?php esc_html_e( 'Optional: Bilder nur in diesem FileBird-Ordner (inkl. Unterordner) suchen. Verhindert, dass z.B. ein Spielerportrait als gleichnamiges Sponsorenlogo verlinkt wird. Die Auswahl wird gespeichert.', 'uhc-laupen-importer' ); ?></p>
+							<?php endif; ?>
+						</td>
+					</tr>
+					<tr>
 						<th><label for="uhc_dry_run"><?php esc_html_e( 'Probelauf', 'uhc-laupen-importer' ); ?></label></th>
 						<td>
 							<label>
@@ -191,6 +215,15 @@ class UHC_Importer {
 		$mode          = $this->get_mode();
 		$dry_run       = ! empty( $_POST['uhc_dry_run'] );
 		$number_column = isset( $_POST['uhc_number_column'] ) ? sanitize_text_field( wp_unslash( $_POST['uhc_number_column'] ) ) : '';
+
+		// Persist the image search folders picked on the upload form — they are
+		// used by the matcher right below (and by the import step later).
+		if ( isset( $_POST['uhc_player_folder'] ) ) {
+			update_option( UHC_Importer_Settings::PLAYER_FOLDER_KEY, absint( $_POST['uhc_player_folder'] ) );
+		}
+		if ( isset( $_POST['uhc_sponsor_folder'] ) ) {
+			update_option( UHC_Importer_Settings::SPONSOR_FOLDER_KEY, absint( $_POST['uhc_sponsor_folder'] ) );
+		}
 
 		// Either a fresh upload, or a re-analysis of the file we already stored.
 		if ( ! empty( $_FILES['uhc_csv_file']['tmp_name'] ) ) {

@@ -76,10 +76,6 @@ class UHC_Importer_Settings {
 
 		update_option( self::OPTION_KEY, $clean );
 
-		// Image search folders (FileBird). 0 = whole library.
-		update_option( self::PLAYER_FOLDER_KEY, isset( $_POST['uhc_player_folder'] ) ? absint( $_POST['uhc_player_folder'] ) : 0 );
-		update_option( self::SPONSOR_FOLDER_KEY, isset( $_POST['uhc_sponsor_folder'] ) ? absint( $_POST['uhc_sponsor_folder'] ) : 0 );
-
 		// Redirect back with a success flag.
 		wp_safe_redirect( add_query_arg(
 			array(
@@ -166,43 +162,6 @@ class UHC_Importer_Settings {
 						</div>
 					<?php endif; ?>
 
-					<h2 style="margin-top:32px"><?php esc_html_e( 'Bilder-Suchordner (FileBird)', 'uhc-laupen-importer' ); ?></h2>
-
-					<p class="description">
-						<?php esc_html_e( 'Optional: Beschränke die Bildsuche des Importers auf je einen FileBird-Ordner (inkl. Unterordner). Ohne Auswahl wird die gesamte Mediathek durchsucht. Mit getrennten Ordnern wird z.B. das Portrait einer Spielerin nie als Sponsorenlogo verlinkt, auch wenn beide gleich heissen.', 'uhc-laupen-importer' ); ?>
-					</p>
-
-					<?php $folders = self::filebird_folders(); ?>
-
-					<?php if ( null === $folders ) : ?>
-						<p><em><?php esc_html_e( 'FileBird ist nicht aktiv — es wird immer die gesamte Mediathek durchsucht.', 'uhc-laupen-importer' ); ?></em></p>
-					<?php else : ?>
-						<table class="form-table" role="presentation">
-							<tr>
-								<th scope="row">
-									<label for="uhc_player_folder"><?php esc_html_e( 'Spielerbilder', 'uhc-laupen-importer' ); ?></label>
-								</th>
-								<td>
-									<select name="uhc_player_folder" id="uhc_player_folder">
-										<option value="0"><?php esc_html_e( '— Gesamte Mediathek —', 'uhc-laupen-importer' ); ?></option>
-										<?php self::folder_options( $folders, self::get_player_folder() ); ?>
-									</select>
-								</td>
-							</tr>
-							<tr>
-								<th scope="row">
-									<label for="uhc_sponsor_folder"><?php esc_html_e( 'Sponsorenlogos', 'uhc-laupen-importer' ); ?></label>
-								</th>
-								<td>
-									<select name="uhc_sponsor_folder" id="uhc_sponsor_folder">
-										<option value="0"><?php esc_html_e( '— Gesamte Mediathek —', 'uhc-laupen-importer' ); ?></option>
-										<?php self::folder_options( $folders, self::get_sponsor_folder() ); ?>
-									</select>
-								</td>
-							</tr>
-						</table>
-					<?php endif; ?>
-
 					<p class="uhc-importer__actions" style="margin-top:24px">
 						<?php submit_button( __( 'Berechtigungen speichern', 'uhc-laupen-importer' ), 'primary', 'submit', false ); ?>
 						<a
@@ -264,7 +223,7 @@ class UHC_Importer_Settings {
 	 *
 	 * @return array{by_parent:array<int,array>,names:array<int,string>}|null
 	 */
-	private static function filebird_folders() {
+	public static function filebird_folders() {
 		global $wpdb;
 
 		$table = $wpdb->prefix . 'fbv';
@@ -295,7 +254,7 @@ class UHC_Importer_Settings {
 	 * @param int   $parent   Internal recursion pointer.
 	 * @param int   $depth    Internal recursion depth.
 	 */
-	private static function folder_options( $folders, $selected, $parent = 0, $depth = 0 ) {
+	public static function folder_options( $folders, $selected, $parent = 0, $depth = 0 ) {
 		if ( empty( $folders['by_parent'][ $parent ] ) ) {
 			return;
 		}
