@@ -263,6 +263,19 @@ class UHC_Player_Writer {
 			$notes[] = __( 'ACF nicht aktiv — Daten als raw post meta gespeichert.', 'uhc-laupen-importer' );
 		}
 
+		// Migration: staff used to live as 'spieler' posts with position
+		// "Staff". Once the person exists in the staff CPT, the legacy
+		// spieler post would show them twice on the team page — trash it.
+		// A spieler post with a real playing position stays untouched (the
+		// same person can be a player elsewhere).
+		if ( 'staff' === $post_type && function_exists( 'get_field' ) ) {
+			$legacy = $this->find_existing_spieler( $full_name, 'spieler' );
+			if ( $legacy && 'Staff' === get_field( 'position', $legacy->ID ) ) {
+				wp_trash_post( $legacy->ID );
+				$notes[] = __( 'Alter Spieler-Eintrag (Staff) in den Papierkorb verschoben.', 'uhc-laupen-importer' );
+			}
+		}
+
 		$result['status']       = $existing ? 'updated' : 'created';
 		$result['status_label'] = $existing
 			? __( 'Aktualisiert', 'uhc-laupen-importer' )
