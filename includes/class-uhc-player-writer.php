@@ -149,10 +149,14 @@ class UHC_Player_Writer {
 		// Media matching (also runs in the dry run so the preview is honest).
 		// Staff photos prefer files with a role marker ("…_trainer.h1"),
 		// player photos the plain ones — so both roles get their own image.
+		// Staff carry no sponsors (a person sponsoring the club belongs to
+		// their PLAYER entry), so the sponsor lookup is skipped entirely.
 		$photo_id = $is_staff
 			? UHC_Media_Matcher::find_staff_photo( $vorname, $nachname, $row['benutzer_id'] ?? '' )
 			: UHC_Media_Matcher::find_player_photo( $vorname, $nachname, $row['benutzer_id'] ?? '' );
-		$sponsors = UHC_Media_Matcher::find_sponsors( $row['sponsor'] ?? '' );
+		$sponsors = $is_staff
+			? array( 'ids' => array(), 'missing' => array() )
+			: UHC_Media_Matcher::find_sponsors( $row['sponsor'] ?? '' );
 
 		$result['photo']   = (bool) $photo_id;
 		$result['sponsor'] = ! empty( $sponsors['ids'] );
@@ -219,13 +223,17 @@ class UHC_Player_Writer {
 		delete_post_meta( $post_id, self::EDITED_META_KEY );
 
 		$fields = array(
-			'vorname'       => $vorname,
-			'nachname'      => $nachname,
-			'spielernummer' => $row['spielernummer'] ?? '',
-			'position'      => $row['position'] ?? '',
-			'geburtsdatum'  => $row['geburtsdatum'] ?? '',
-			'email'         => $row['email'] ?? '',
+			'vorname'      => $vorname,
+			'nachname'     => $nachname,
+			'position'     => $row['position'] ?? '',
+			'geburtsdatum' => $row['geburtsdatum'] ?? '',
 		);
+		// Staff need only name, position, Geburtsdatum, Nationalität and the
+		// photo — no jersey number, no email, no sponsors.
+		if ( ! $is_staff ) {
+			$fields['spielernummer'] = $row['spielernummer'] ?? '';
+			$fields['email']         = $row['email'] ?? '';
+		}
 		// Only write the nationality when the CSV actually has one, so an empty
 		// cell doesn't wipe a manually curated value.
 		if ( ! empty( $row['nationalitat'] ) ) {
@@ -248,7 +256,10 @@ class UHC_Player_Writer {
 			// Sponsors without a matching logo are kept as plain text so the
 			// player card can still name them. Written unconditionally so a
 			// later import with a found logo clears the stale text.
-			update_field( 'sponsor_text', implode( ', ', $sponsors['missing'] ), $post_id );
+			// (Staff carry no sponsor fields at all.)
+			if ( ! $is_staff ) {
+				update_field( 'sponsor_text', implode( ', ', $sponsors['missing'] ), $post_id );
+			}
 		} else {
 			// ACF not active — fall back to raw post meta so data isn't lost.
 			foreach ( $fields as $key => $value ) {
