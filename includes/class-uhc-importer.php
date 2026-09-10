@@ -124,6 +124,13 @@ class UHC_Importer {
 									<span>
 										<strong><?php esc_html_e( 'Spieler aktualisieren', 'uhc-laupen-importer' ); ?></strong><br />
 										<span class="description"><?php esc_html_e( 'Bestehende Spieler werden aktualisiert, neue hinzugefügt. Spieler, die nicht in der Datei stehen, bleiben unverändert. Ideal, um einzelne Teams nachzuimportieren.', 'uhc-laupen-importer' ); ?></span>
+										<span class="uhc-importer__submode" id="uhc_skip_edited_wrap" style="display:block;margin-top:8px">
+											<label>
+												<input type="checkbox" name="uhc_skip_edited" id="uhc_skip_edited" value="1" />
+												<?php esc_html_e( 'Manuell bearbeitete Spieler überspringen', 'uhc-laupen-importer' ); ?>
+											</label><br />
+											<span class="description"><?php esc_html_e( 'Spieler, die seit dem letzten Import im WordPress-Backend bearbeitet wurden, werden beim Import nicht überschrieben.', 'uhc-laupen-importer' ); ?></span>
+										</span>
 									</span>
 								</label>
 								<label class="uhc-importer__mode">
@@ -267,9 +274,15 @@ class UHC_Importer {
 				'index'     => $index,
 				'row'       => $row,
 				'team_post' => $team_post,
-				'photo'     => UHC_Media_Matcher::find_player_photo( $row['vorname'], $row['nachname'], $row['benutzer_id'] ?? '' ),
+				'photo'     => 'Staff' === ( $row['position'] ?? '' )
+					? UHC_Media_Matcher::find_staff_photo( $row['vorname'], $row['nachname'], $row['benutzer_id'] ?? '' )
+					: UHC_Media_Matcher::find_player_photo( $row['vorname'], $row['nachname'], $row['benutzer_id'] ?? '' ),
 				'sponsors'  => UHC_Media_Matcher::find_sponsors( $row['sponsor'] ?? '' ),
-				'existing'  => $this->get_existing_spieler( $row['vorname'], $row['nachname'] ),
+				'existing'  => $this->get_existing_spieler(
+					$row['vorname'],
+					$row['nachname'],
+					'Staff' === ( $row['position'] ?? '' ) ? 'staff' : 'spieler'
+				),
 			);
 			if ( $team_post ) {
 				$matched[] = $entry;
@@ -293,7 +306,11 @@ class UHC_Importer {
 		if ( self::MODE_FRESH === $mode ) {
 			$keep = array();
 			foreach ( $rows as $row ) {
-				$existing = $this->get_existing_spieler( $row['vorname'], $row['nachname'] );
+				$existing = $this->get_existing_spieler(
+					$row['vorname'],
+					$row['nachname'],
+					'Staff' === ( $row['position'] ?? '' ) ? 'staff' : 'spieler'
+				);
 				if ( $existing ) {
 					$keep[] = $existing->ID;
 				}
@@ -310,9 +327,9 @@ class UHC_Importer {
 			<?php if ( $skipped ) : ?>
 				— <?php printf( esc_html__( '%d übersprungen', 'uhc-laupen-importer' ), $skipped ); ?>
 			<?php endif; ?>
-			· <span class="uhc-importer__badge uhc-importer__badge--ok"><?php printf( esc_html__( '%d Team automatisch erkannt', 'uhc-laupen-importer' ), count( $matched ) ); ?></span>
+			· <span class="uhc-importer__badge uhc-importer__badge--ok"><?php printf( esc_html__( 'Team bei %d Personen automatisch erkannt', 'uhc-laupen-importer' ), count( $matched ) ); ?></span>
 			<?php if ( count( $unmatched ) ) : ?>
-				· <span class="uhc-importer__badge uhc-importer__badge--warn"><?php printf( esc_html__( '%d Team nicht gefunden', 'uhc-laupen-importer' ), count( $unmatched ) ); ?></span>
+				· <span class="uhc-importer__badge uhc-importer__badge--warn"><?php printf( esc_html__( 'Team bei %d Personen nicht gefunden', 'uhc-laupen-importer' ), count( $unmatched ) ); ?></span>
 			<?php endif; ?>
 			· <span class="uhc-importer__badge uhc-importer__badge--ok"><?php printf( esc_html__( '%d Spielerbilder', 'uhc-laupen-importer' ), $photos_found ); ?></span>
 			<?php if ( $sponsors_found ) : ?>
@@ -340,6 +357,7 @@ class UHC_Importer {
 			<input type="hidden" name="uhc_file_token" value="<?php echo esc_attr( $token ); ?>" />
 			<input type="hidden" name="uhc_mode" value="<?php echo esc_attr( $mode ); ?>" />
 			<input type="hidden" name="uhc_dry_run" value="<?php echo $dry_run ? '1' : '0'; ?>" />
+			<?php if ( ! empty( $_POST['uhc_skip_edited'] ) ) : ?><input type="hidden" name="uhc_skip_edited" value="1" /><?php endif; ?>
 			<input type="hidden" name="uhc_number_column" value="<?php echo esc_attr( $resolved['spielernummer'] ); ?>" />
 
 			<?php if ( empty( $resolved['spielernummer'] ) ) : ?>
@@ -541,6 +559,7 @@ class UHC_Importer {
 				<input type="hidden" name="uhc_file_token" value="<?php echo esc_attr( $token ); ?>" />
 				<input type="hidden" name="uhc_mode" value="<?php echo esc_attr( $mode ); ?>" />
 				<?php if ( $dry_run ) : ?><input type="hidden" name="uhc_dry_run" value="1" /><?php endif; ?>
+				<?php if ( ! empty( $_POST['uhc_skip_edited'] ) ) : ?><input type="hidden" name="uhc_skip_edited" value="1" /><?php endif; ?>
 				<label for="uhc_number_column"><strong><?php esc_html_e( 'Spalte für die Rückennummer:', 'uhc-laupen-importer' ); ?></strong></label>
 				<select name="uhc_number_column" id="uhc_number_column" class="uhc-importer__select">
 					<option value=""><?php esc_html_e( '— keine —', 'uhc-laupen-importer' ); ?></option>
@@ -592,7 +611,11 @@ class UHC_Importer {
 			}
 		}
 
-		$writer  = new UHC_Player_Writer( $dry_run );
+		// Skip-manually-edited only applies to the update mode — a fresh
+		// import deliberately replaces everything.
+		$skip_edited = self::MODE_UPDATE === $mode && ! empty( $_POST['uhc_skip_edited'] );
+
+		$writer  = new UHC_Player_Writer( $dry_run, $skip_edited );
 		$results = array();
 		foreach ( $rows as $row ) {
 			$results[] = $writer->write( $row );
@@ -629,10 +652,11 @@ class UHC_Importer {
 			$this->delete_token_file( $token );
 		}
 
-		$created = count( array_filter( $results, fn( $r ) => 'created' === $r['status'] ) );
-		$updated = count( array_filter( $results, fn( $r ) => 'updated' === $r['status'] ) );
-		$failed  = count( array_filter( $results, fn( $r ) => 'error'   === $r['status'] ) );
-		$photos  = count( array_filter( $results, fn( $r ) => ! empty( $r['photo'] ) ) );
+		$created  = count( array_filter( $results, fn( $r ) => 'created' === $r['status'] ) );
+		$updated  = count( array_filter( $results, fn( $r ) => 'updated' === $r['status'] ) );
+		$failed   = count( array_filter( $results, fn( $r ) => 'error'   === $r['status'] ) );
+		$photos   = count( array_filter( $results, fn( $r ) => ! empty( $r['photo'] ) ) );
+		$skipped_edited = count( array_filter( $results, fn( $r ) => 'skipped' === $r['status'] ) );
 		?>
 
 		<div class="uhc-importer__notice uhc-importer__notice--<?php echo $failed ? 'warn' : 'success'; ?>">
@@ -645,6 +669,9 @@ class UHC_Importer {
 				esc_html__( 'Erstellt: %1$d | Aktualisiert: %2$d | Fehler: %3$d | Spielerbilder verknüpft: %4$d', 'uhc-laupen-importer' ),
 				$created, $updated, $failed, $photos
 			); ?>
+			<?php if ( $skipped_edited ) : ?>
+				<?php printf( ' | ' . esc_html__( 'Übersprungen (manuell bearbeitet): %d', 'uhc-laupen-importer' ), $skipped_edited ); ?>
+			<?php endif; ?>
 			<?php if ( $trash_notice ) : ?>
 				<br><?php echo esc_html( $trash_notice ); ?>
 			<?php endif; ?>
@@ -709,7 +736,7 @@ class UHC_Importer {
 	private function players_to_trash( $keep_ids ) {
 		$keep    = array_map( 'intval', (array) $keep_ids );
 		$players = get_posts( array(
-			'post_type'              => 'spieler',
+			'post_type'              => array( 'spieler', 'staff' ),
 			'post_status'            => array( 'publish', 'draft', 'pending', 'private' ),
 			'posts_per_page'         => -1,
 			'orderby'                => 'title',
@@ -782,10 +809,10 @@ class UHC_Importer {
 		return UHC_Player_Writer::find_team( $team_name );
 	}
 
-	public function get_existing_spieler( $vorname, $nachname ) {
+	public function get_existing_spieler( $vorname, $nachname, $post_type = 'spieler' ) {
 		$title = trim( $vorname . ' ' . $nachname );
 		$posts = get_posts( array(
-			'post_type'              => 'spieler',
+			'post_type'              => $post_type,
 			'post_status'            => array( 'publish', 'draft', 'pending', 'private' ),
 			'title'                  => $title,
 			'posts_per_page'         => 1,

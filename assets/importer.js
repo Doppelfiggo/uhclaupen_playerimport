@@ -56,3 +56,26 @@
 
 	} );
 } )();
+
+/* Upload form: the "Manuell bearbeitete Spieler überspringen" sub-option
+   only applies to the "Spieler aktualisieren" mode — hide it otherwise. */
+( function () {
+	document.addEventListener( 'DOMContentLoaded', function () {
+		var wrap   = document.getElementById( 'uhc_skip_edited_wrap' );
+		var radios = document.querySelectorAll( 'input[name="uhc_mode"]' );
+		if ( ! wrap || ! radios.length ) return;
+
+		function sync() {
+			var checked = document.querySelector( 'input[name="uhc_mode"]:checked' );
+			var update  = checked && 'update' === checked.value;
+			wrap.style.display = update ? 'block' : 'none';
+			if ( ! update ) {
+				var cb = document.getElementById( 'uhc_skip_edited' );
+				if ( cb ) cb.checked = false;
+			}
+		}
+
+		radios.forEach( function ( r ) { r.addEventListener( 'change', sync ); } );
+		sync();
+	} );
+} )();

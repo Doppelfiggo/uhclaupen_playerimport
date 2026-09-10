@@ -30,3 +30,8 @@ require_once UHC_IMPORTER_DIR . 'includes/class-uhc-healthcheck-page.php';
 new UHC_Importer_Settings();
 new UHC_Importer();
 new UHC_Healthcheck_Page();
+
+// Track manual backend edits on players and staff, so the import can
+// optionally leave those posts untouched ("Manuell bearbeitete überspringen").
+add_action( 'save_post_spieler', array( 'UHC_Player_Writer', 'mark_manual_edit' ) );
+add_action( 'save_post_staff', array( 'UHC_Player_Writer', 'mark_manual_edit' ) );

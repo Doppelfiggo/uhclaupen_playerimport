@@ -18,10 +18,21 @@ if ( ! defined( 'ABSPATH' ) ) {
 class UHC_Media_Matcher {
 
 	/**
+	 * File names carrying one of these markers are STAFF photos
+	 * ("hanka_lackova_trainer.h1", "Remo-Zysset-Assistenzcoach") — the same
+	 * person can also have a separate player photo without a marker.
+	 */
+	const ROLE_MARKERS = '/(trainer|assistenzcoach|headcoach|goalitrainer|coach|staff|vorstand)/i';
+
+	/**
 	 * Lookup tables, one per search scope:
-	 * FileBird folder ID (0 = whole library) => [ normalised name => attachment ID ].
+	 * FileBird folder ID (0 = whole library) =>
+	 *   [ 'plain' => [normalised name => ID], 'role' => [normalised name => ID] ].
 	 *
-	 * @var array<int,array<string,int>>
+	 * 'role' holds attachments whose file name carries a ROLE_MARKERS keyword
+	 * (staff photos); 'plain' holds everything else.
+	 *
+	 * @var array<int,array{plain:array<string,int>,role:array<string,int>}>
 	 */
 	private static $indexes = array();
 
@@ -31,18 +42,24 @@ class UHC_Media_Matcher {
 	 * @param string $name      Name to look for, e.g. "Dominic Künzler" or "Raiffeisen".
 	 * @param int    $folder_id Optional FileBird folder ID — restricts the search
 	 *                          to that folder and its subfolders. 0 = whole library.
+	 * @param string $prefer    'plain' (default) or 'role' — which file group wins
+	 *                          when the same name exists as player AND staff photo.
 	 * @return int Attachment ID, or 0 when nothing matches.
 	 */
-	public static function find( $name, $folder_id = 0 ) {
+	public static function find( $name, $folder_id = 0, $prefer = 'plain' ) {
 		$name = trim( (string) $name );
 		if ( '' === $name ) {
 			return 0;
 		}
 
-		$index = self::index( (int) $folder_id );
-		foreach ( self::variants( $name ) as $variant ) {
-			if ( isset( $index[ $variant ] ) ) {
-				return $index[ $variant ];
+		$index  = self::index( (int) $folder_id );
+		$groups = 'role' === $prefer ? array( 'role', 'plain' ) : array( 'plain', 'role' );
+
+		foreach ( $groups as $group ) {
+			foreach ( self::variants( $name ) as $variant ) {
+				if ( isset( $index[ $group ][ $variant ] ) ) {
+					return $index[ $group ][ $variant ];
+				}
 			}
 		}
 
@@ -58,6 +75,33 @@ class UHC_Media_Matcher {
 	 * @return int Attachment ID, or 0.
 	 */
 	public static function find_player_photo( $vorname, $nachname, $benutzer_id = '' ) {
+		return self::find_person_photo( $vorname, $nachname, $benutzer_id, 'plain' );
+	}
+
+	/**
+	 * Find the attachment for a STAFF member. Same name spellings as players,
+	 * but files with a role marker ("…_trainer.h1", "…-Assistenzcoach") win —
+	 * the same person may also have a player photo under the plain name.
+	 *
+	 * @param string $vorname     First name.
+	 * @param string $nachname    Last name.
+	 * @param string $benutzer_id Optional ClubDesk login.
+	 * @return int Attachment ID, or 0.
+	 */
+	public static function find_staff_photo( $vorname, $nachname, $benutzer_id = '' ) {
+		return self::find_person_photo( $vorname, $nachname, $benutzer_id, 'role' );
+	}
+
+	/**
+	 * Shared person-photo lookup — see find_player_photo() / find_staff_photo().
+	 *
+	 * @param string $vorname     First name.
+	 * @param string $nachname    Last name.
+	 * @param string $benutzer_id Optional ClubDesk login ("dominic.kuenzler").
+	 * @param string $prefer      'plain' (player files) or 'role' (staff files).
+	 * @return int Attachment ID, or 0.
+	 */
+	private static function find_person_photo( $vorname, $nachname, $benutzer_id, $prefer ) {
 		$candidates = array(
 			trim( $vorname . '.' . $nachname ),
 			trim( $vorname . ' ' . $nachname ),
@@ -84,7 +128,7 @@ class UHC_Media_Matcher {
 		$folder = self::configured_folder( 'player' );
 
 		foreach ( $candidates as $candidate ) {
-			$id = self::find( $candidate, $folder );
+			$id = self::find( $candidate, $folder, $prefer );
 			if ( $id ) {
 				return $id;
 			}
@@ -179,7 +223,7 @@ class UHC_Media_Matcher {
 			)";
 		}
 
-		self::$indexes[ $folder_id ] = array();
+		self::$indexes[ $folder_id ] = array( 'plain' => array(), 'role' => array() );
 
 		$rows = $wpdb->get_results(
 			"SELECT p.ID, p.post_title, p.post_name, m.meta_value AS file
@@ -191,8 +235,13 @@ class UHC_Media_Matcher {
 
 		foreach ( $rows as $row ) {
 			$names = array();
+			$group = 'plain';
 
 			if ( $row->file ) {
+				// Staff photos are recognised by a role keyword in the file name.
+				if ( preg_match( self::ROLE_MARKERS, pathinfo( $row->file, PATHINFO_FILENAME ) ) ) {
+					$group = 'role';
+				}
 				$base    = pathinfo( $row->file, PATHINFO_FILENAME );
 				$names[] = $base;
 
@@ -228,8 +277,8 @@ class UHC_Media_Matcher {
 			foreach ( array_filter( array_unique( $names ) ) as $name ) {
 				foreach ( self::variants( $name ) as $variant ) {
 					// Keep the first (usually the original upload) on collisions.
-					if ( ! isset( self::$indexes[ $folder_id ][ $variant ] ) ) {
-						self::$indexes[ $folder_id ][ $variant ] = (int) $row->ID;
+					if ( ! isset( self::$indexes[ $folder_id ][ $group ][ $variant ] ) ) {
+						self::$indexes[ $folder_id ][ $group ][ $variant ] = (int) $row->ID;
 					}
 				}
 			}
